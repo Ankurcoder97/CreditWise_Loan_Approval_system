@@ -118,115 +118,206 @@ if st.button("Check Loan Eligibility", type="primary"):
         # Get prediction probabilities
         proba = model.predict_proba(features)
         
-        # Assuming class 0 = Approved, class 1 = Rejected
-        # Some models might have opposite ordering, let's check:
-        approved_prob = proba[0][0]  # First probability
-        rejected_prob = proba[0][1]  # Second probability
+        # Get actual prediction
+        prediction = model.predict(features)[0]
         
-        # Optional: Check which class is which
-        if hasattr(model, 'classes_'):
-            st.write(f"Model classes: {model.classes_}")
-            # If classes are ['Rejected', 'Approved'], adjust accordingly
-            if len(model.classes_) == 2:
-                if model.classes_[0] == 'Rejected' or model.classes_[0] == 1:
-                    # Swap probabilities
-                    approved_prob, rejected_prob = rejected_prob, approved_prob
+        # Model classes are [0 1] where 0=Approved, 1=Rejected
+        approved_prob = proba[0][0]  # Probability of class 0 (Approved)
+        rejected_prob = proba[0][1]  # Probability of class 1 (Rejected)
         
-        # Display probabilities
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Approval Probability", f"{approved_prob*100:.1f}%")
-        with col2:
-            st.metric("Rejection Probability", f"{rejected_prob*100:.1f}%")
+        # ---------- BUSINESS RULES VALIDATION ----------
+        st.subheader("📋 Business Rules Validation")
+        
+        rule_violations = []
+        warnings = []
+        
+        # Rule 1: Credit Score check (HARD RULE)
+        if Credit_Score < 650:
+            rule_violations.append(f"Credit Score below 650 (Current: {Credit_Score})")
+        else:
+            st.success(f"✅ Credit Score: {Credit_Score} (≥ 650)")
+        
+        # Rule 2: Debt-to-Income Ratio check (HARD RULE)
+        if DTI_Ratio > 0.5:
+            rule_violations.append(f"Debt-to-Income Ratio above 0.5 (Current: {DTI_Ratio:.2f})")
+        else:
+            st.success(f"✅ Debt-to-Income Ratio: {DTI_Ratio:.2f} (≤ 0.5)")
+        
+        # Rule 3: Existing Loans check (HARD RULE)
+        if Existing_Loans >= 2:
+            rule_violations.append(f"Too many existing loans: {Existing_Loans} (Maximum: 1)")
+        else:
+            st.success(f"✅ Existing Loans: {Existing_Loans} (≤ 1)")
+        
+        # Rule 4: Income to Loan Ratio (WARNING, not hard rule)
+        total_income = Applicant_Income + Coapplicant_Income
+        loan_to_income_ratio = Loan_Amount / total_income if total_income > 0 else 0
+        
+        if loan_to_income_ratio > 5:
+            warnings.append(f"High loan-to-income ratio: {loan_to_income_ratio:.2f} (Recommended: ≤ 5)")
+            st.warning(f"⚠️ Loan-to-Income Ratio: {loan_to_income_ratio:.2f} (High)")
+        elif total_income > 0:
+            st.success(f"✅ Loan-to-Income Ratio: {loan_to_income_ratio:.2f} (≤ 5)")
+        
+        # Rule 5: Model Confidence (WARNING if low)
+        if approved_prob < 0.75:
+            warnings.append(f"Low model confidence: {approved_prob*100:.1f}% (Threshold: 75%)")
         
         st.divider()
         
-        # ---------- BUSINESS RULES VALIDATION ----------
-        st.subheader("Business Rules Validation")
-        rule_violations = []
+        # ---------- MODEL PREDICTION RESULTS ----------
+        st.subheader("🤖 Model Prediction")
         
-        # Rule 1: Credit Score check
-        if Credit_Score < 650:
-            rule_violations.append("❌ Credit Score below 650")
+        col1, col2 = st.columns(2)
+        with col1:
+            # Show color-coded probability
+            if approved_prob >= 0.75:
+                st.metric("Approval Probability", f"{approved_prob*100:.1f}%", 
+                         delta="High Confidence", delta_color="normal")
+            elif approved_prob >= 0.5:
+                st.metric("Approval Probability", f"{approved_prob*100:.1f}%", 
+                         delta="Medium Confidence", delta_color="off")
+            else:
+                st.metric("Approval Probability", f"{approved_prob*100:.1f}%", 
+                         delta="Low Confidence", delta_color="inverse")
+        
+        with col2:
+            # Show what the model would predict
+            model_decision = "APPROVED" if prediction == 0 else "REJECTED"
+            if prediction == 0:
+                st.success(f"Model Decision: {model_decision}")
+            else:
+                st.error(f"Model Decision: {model_decision}")
+        
+        # Explain the model's thinking
+        if approved_prob > 0.9:
+            st.info("The model is very confident in its prediction.")
+        elif approved_prob > 0.7:
+            st.info("The model is fairly confident in its prediction.")
         else:
-            st.success("✅ Credit Score acceptable (≥ 650)")
-        
-        # Rule 2: Debt-to-Income Ratio check
-        if DTI_Ratio > 0.5:
-            rule_violations.append("❌ Debt-to-Income Ratio above 0.5")
-        else:
-            st.success("✅ Debt-to-Income Ratio acceptable (≤ 0.5)")
-        
-        # Rule 3: Existing Loans check
-        if Existing_Loans >= 2:
-            rule_violations.append("❌ Too many existing loans (≥ 2)")
-        else:
-            st.success("✅ Existing loans acceptable (< 2)")
-        
-        # Rule 4: Income to Loan Ratio (optional additional rule)
-        total_income = Applicant_Income + Coapplicant_Income
-        if total_income > 0 and Loan_Amount / total_income > 5:
-            rule_violations.append("❌ Loan amount too high relative to income")
-        elif total_income > 0:
-            st.success(f"✅ Loan-to-Income ratio acceptable ({Loan_Amount/total_income:.2f})")
+            st.info("The model has low confidence in its prediction.")
         
         st.divider()
         
         # ---------- FINAL DECISION ----------
-        st.subheader("Final Decision")
+        st.subheader("⚖️ Final Decision")
         
-        # Check if any business rules were violated
+        # Check if any HARD business rules were violated
         if rule_violations:
             st.error("## ❌ LOAN REJECTED")
-            st.write("**Reasons for rejection:**")
+            st.write("**Reasons for automatic rejection (business rules):**")
             for violation in rule_violations:
-                st.write(f"- {violation}")
+                st.write(f"• {violation}")
+            
+            # Show warnings if any
+            if warnings:
+                st.write("**Additional concerns:**")
+                for warning in warnings:
+                    st.write(f"• ⚠️ {warning}")
+                
+            st.write("\n**Note:** Business rules take precedence over model predictions for risk management.")
+            
         else:
-            # No rule violations, use model prediction with threshold
+            # No hard rule violations, now check model confidence
             if approved_prob >= 0.75:
                 st.success("## ✅ LOAN APPROVED")
                 st.balloons()
-                st.write(f"**Approval confidence: {approved_prob*100:.1f}%**")
+                st.write(f"**All criteria met with {approved_prob*100:.1f}% confidence**")
+                
+                # Show any warnings as notes
+                if warnings:
+                    st.write("**Notes:**")
+                    for warning in warnings:
+                        st.write(f"• {warning}")
             else:
                 st.error("## ❌ LOAN REJECTED")
                 st.write(f"**Reason:** Model confidence too low ({approved_prob*100:.1f}% < 75% threshold)")
+                
+                # If model actually predicted approved but confidence is low
+                if prediction == 0:
+                    st.write("Although the model predicts approval, confidence is below the required threshold.")
         
         # ---------- RECOMMENDATIONS ----------
         st.divider()
         st.subheader("💡 Recommendations")
         
-        if rule_violations or approved_prob < 0.75:
-            recommendations = []
-            
-            if Credit_Score < 650:
-                recommendations.append("Improve your credit score to at least 650")
-            if DTI_Ratio > 0.5:
-                recommendations.append("Reduce your debt-to-income ratio below 0.5")
-            if Existing_Loans >= 2:
-                recommendations.append("Pay off some existing loans before applying")
-            if Loan_Amount / (total_income + 1) > 5:
-                recommendations.append("Consider requesting a smaller loan amount")
-            if approved_prob < 0.75 and not rule_violations:
-                recommendations.append("Increase your savings or collateral value")
-                recommendations.append("Consider adding a co-applicant with higher income")
-            
-            if recommendations:
-                st.write("To improve your chances:")
-                for rec in recommendations:
-                    st.write(f"• {rec}")
+        if rule_violations:
+            st.write("**To fix automatic rejection issues:**")
+            for violation in rule_violations:
+                if "Credit Score" in violation:
+                    st.write("• Improve credit score to at least 650")
+                    st.write("  - Pay bills on time")
+                    st.write("  - Reduce credit card utilization")
+                    st.write("  - Check credit report for errors")
+                elif "Debt-to-Income" in violation:
+                    st.write("• Reduce debt-to-income ratio below 0.5")
+                    st.write("  - Pay down existing debt")
+                    st.write("  - Increase your income")
+                elif "existing loans" in violation:
+                    st.write("• Reduce number of existing loans")
+                    st.write("  - Consolidate loans if possible")
+                    st.write("  - Pay off smaller loans first")
+        
+        elif approved_prob < 0.75:
+            st.write("**To improve model confidence:**")
+            if loan_to_income_ratio > 3:
+                st.write("• Request a smaller loan amount")
+            if Savings < Loan_Amount * 0.2:
+                st.write("• Increase your savings")
+            if Collateral_Value < Loan_Amount * 0.5:
+                st.write("• Provide additional collateral")
+            st.write("• Consider adding a co-applicant with stable income")
+            st.write("• Choose a shorter loan term")
+        
         else:
-            st.write("• Your application meets all criteria!")
-            st.write("• Consider proceeding with the loan documentation")
+            # Approved
+            st.success("**Your application looks strong!**")
+            st.write("• Proceed with loan documentation")
+            st.write("• Keep maintaining good financial habits")
+        
+        # ---------- SUMMARY TABLE ----------
+        st.divider()
+        st.subheader("📊 Application Summary")
+        
+        summary_data = {
+            "Criteria": ["Credit Score", "DTI Ratio", "Existing Loans", "Model Confidence", "Total Income", "Loan Amount", "Loan-to-Income"],
+            "Value": [
+                f"{Credit_Score}",
+                f"{DTI_Ratio:.2f}",
+                f"{Existing_Loans}",
+                f"{approved_prob*100:.1f}%",
+                f"${total_income:,.0f}",
+                f"${Loan_Amount:,.0f}",
+                f"{loan_to_income_ratio:.2f}"
+            ],
+            "Status": [
+                "✅ Pass" if Credit_Score >= 650 else "❌ Fail",
+                "✅ Pass" if DTI_Ratio <= 0.5 else "❌ Fail",
+                "✅ Pass" if Existing_Loans < 2 else "❌ Fail",
+                "✅ Pass" if approved_prob >= 0.75 else "❌ Fail",
+                "-",
+                "-",
+                "⚠️ High" if loan_to_income_ratio > 5 else "✅ Good"
+            ]
+        }
+        
+        # Display as table
+        import pandas as pd
+        df_summary = pd.DataFrame(summary_data)
+        st.table(df_summary)
 
 # -------------------- SIDEBAR INFO --------------------
 with st.sidebar:
-    st.header("ℹ️ Approval Criteria")
-    st.write("**Hard Rules (Auto-Reject):**")
-    st.write("- Credit Score < 650")
-    st.write("- Debt-to-Income Ratio > 0.5")
-    st.write("- Existing Loans ≥ 2")
+    st.header("ℹ️ Approval Process")
+    st.write("**Two-Step Verification:**")
+    st.write("1. **Business Rules (Auto-Reject)**")
+    st.write("   - Credit Score ≥ 650")
+    st.write("   - DTI Ratio ≤ 0.5")
+    st.write("   - Existing Loans < 2")
     st.write("")
-    st.write("**Model Threshold:**")
-    st.write("- Approval probability ≥ 75%")
+    st.write("2. **Model Confidence**")
+    st.write("   - Approval probability ≥ 75%")
     st.write("")
-    st.write("**Note:** All criteria must be met for approval.")
+    st.write("**Both conditions must be met for approval.**")
+    st.write("")
+    st.write("**Note:** The AI model prediction (shown above) is overridden by business rules for risk control.")
