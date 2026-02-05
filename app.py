@@ -119,14 +119,15 @@ assert features.shape[1] == 27
 if st.button("Check Loan Eligibility"):
     proba = model.predict_proba(features)
 
-    approved_prob = proba[0][0]   # class 0 = Approved
-    rejected_prob = proba[0][1]
+    st.write("Raw probabilities:", proba)
 
-    st.write("Approval Probability:", approved_prob)
-    st.write("Rejection Probability:", rejected_prob)
+    approved_prob = proba[0][0]   # class 0
+    rejected_prob = proba[0][1]   # class 1
 
-    # STRICT BANK RULE
-    if approved_prob >= 0.70:
-        st.success("✅ Loan Approved")
+    st.write("Approved prob:", approved_prob)
+    st.write("Rejected prob:", rejected_prob)
+
+    if prediction[0] == 0:
+        st.success("APPROVED (model class)")
     else:
-        st.error("❌ Loan Rejected")
+        st.error("REJECTED (model class)")
