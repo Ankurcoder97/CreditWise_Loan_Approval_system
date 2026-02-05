@@ -115,17 +115,21 @@ features = np.array([[
 assert features.shape[1] == 27
 
 # -------------------- PREDICTION --------------------
-
 if st.button("Check Loan Eligibility"):
     proba = model.predict_proba(features)
-
-    st.write("Raw probabilities:", proba)
 
     approved_prob = proba[0][0]   # class 0
     rejected_prob = proba[0][1]   # class 1
 
     st.write("Approved prob:", approved_prob)
     st.write("Rejected prob:", rejected_prob)
+
+    # HARD RULE (bank-style)
+    if approved_prob >= 0.75 and Credit_Score >= 700 and DTI_Ratio <= 0.4:
+        st.success("✅ Loan Approved")
+    else:
+        st.error("❌ Loan Rejected")
+
 
     if prediction[0] == 0:
         st.success("APPROVED (model class)")
