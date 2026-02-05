@@ -118,20 +118,21 @@ assert features.shape[1] == 27
 if st.button("Check Loan Eligibility"):
     proba = model.predict_proba(features)
 
-    approved_prob = proba[0][0]   # class 0
-    rejected_prob = proba[0][1]   # class 1
+    approved_prob = proba[0][0]   # class 0 = Approved
+    rejected_prob = proba[0][1]   # class 1 = Rejected
 
     st.write("Approved prob:", approved_prob)
     st.write("Rejected prob:", rejected_prob)
 
-    # HARD RULE (bank-style)
-    if approved_prob >= 0.75 and Credit_Score >= 700 and DTI_Ratio <= 0.4:
+    # HARD BUSINESS RULES (FINAL DECISION)
+    if Credit_Score < 650:
+        st.error("❌ Loan Rejected (Low Credit Score)")
+    elif DTI_Ratio > 0.5:
+        st.error("❌ Loan Rejected (High Debt-to-Income Ratio)")
+    elif Existing_Loans >= 2:
+        st.error("❌ Loan Rejected (Too Many Existing Loans)")
+    elif approved_prob >= 0.75:
         st.success("✅ Loan Approved")
     else:
         st.error("❌ Loan Rejected")
 
-
-    if prediction[0] == 0:
-        st.success("APPROVED (model class)")
-    else:
-        st.error("REJECTED (model class)")
