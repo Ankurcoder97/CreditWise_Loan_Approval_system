@@ -122,9 +122,6 @@ if st.button("Check Loan Eligibility"):
     approved_prob = proba[0][0]   # class 0 = Approved
     rejected_prob = proba[0][1]   # class 1 = Rejected
 
-    st.write("Approved prob:", approved_prob)
-    st.write("Rejected prob:", rejected_prob)
-
     # HARD BUSINESS RULES (FINAL DECISION)
     if Credit_Score < 650:
         st.error("❌ Loan Rejected (Low Credit Score)")
